@@ -22,12 +22,6 @@ import (
 	"unsafe"
 )
 
-func init() {
-	fonts = make(map[string]Font)
-}
-
-var fonts map[string]Font
-
 type LineCap C.int
 
 const (
@@ -81,11 +75,19 @@ func toColor(c color.Color) C.NVGcolor {
 
 type Context struct {
 	cbase *C.NVGcontext
+	fonts map[string]*Font
 }
+
+const FONT_DEFAULT = "DejaVuSans"
 
 // NewContext returns a New Context
 func NewContext() Context {
-	return Context{C.nvgCreateGL3(C.NVG_ANTIALIAS | C.NVG_STENCIL_STROKES)}
+	ctx := Context{
+		C.nvgCreateGL3(C.NVG_ANTIALIAS | C.NVG_STENCIL_STROKES),
+		make(map[string]*Font),
+	}
+	ctx.NewFont(FONT_DEFAULT, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+	return ctx
 }
 
 // BeginFrame begins drawing a new frame.
@@ -389,36 +391,45 @@ func (self Context) Stroke() {
 
 // Creates font by loading it from the disk from specified file name.
 // Returns handle to the font.
-func (self Context) NewFont(name, filepath string) Font {
-	if _, ok := fonts[name]; !ok {
+func (self Context) NewFont(name, filepath string) *Font {
+	if _, ok := self.fonts[name]; !ok {
 		n := C.CString(name)
 		defer C.free(unsafe.Pointer(n))
 		p := C.CString(filepath)
 		defer C.free(unsafe.Pointer(p))
-		f := Font{C.nvgCreateFont(self.cbase, n, p)}
-		fonts[name] = f
-		return f
+		self.fonts[name] = &Font{C.nvgCreateFont(self.cbase, n, p), nil}
 	}
 
-	return fonts[name]
+	return self.fonts[name]
 }
 
 // Creates image by loading it from the specified memory chunk.
 // Returns handle to the font.
-// func (self Context) CreateFontMem() {
-// 	C.nvgCreateFontMem(self.cbase)
-// }
-// int nvgCreateFontMem(NVGcontext* ctx, const char* name, unsigned char* data, int ndata, int freeData);
+func (self Context) NewFontMem(name string, data []byte) (*Font, error) {
+	if _, ok := self.fonts[name]; !ok {
+		n := C.CString(name)
+		defer C.free(unsafe.Pointer(n))
+		i := C.nvgCreateFontMem(self.cbase, n, (*C.uchar)(unsafe.Pointer(&data[0])), (C.int)(len(data)), 0)
+		if i == -1 {
+			return nil, errors.New("Font could not be created from data: " + name)
+		}
+		self.fonts[name] = &Font{i, data}
+	}
+	return self.fonts[name], nil
+}
 
 // Finds a loaded font of specified name, and returns handle to it, or -1 if the font is not found.
 func (self Context) FindFont(name string) (*Font, error) {
-	n := C.CString(name)
-	defer C.free(unsafe.Pointer(n))
-	i := C.nvgFindFont(self.cbase, n)
-	if i == -1 {
-		return nil, errors.New("Font not found: " + name)
+	if _, ok := self.fonts[name]; !ok {
+		n := C.CString(name)
+		defer C.free(unsafe.Pointer(n))
+		i := C.nvgFindFont(self.cbase, n)
+		if i == -1 {
+			return nil, errors.New("Font not found: " + name)
+		}
+		self.fonts[name] = &Font{i, nil}
 	}
-	return &Font{i}, nil
+	return self.fonts[name], nil
 }
 
 // Sets the font size of current text style.
@@ -482,4 +493,7 @@ type TextRow struct {
 
 type Font struct {
 	cbase C.int
+
+	// PATCH: Hold reference to avoid GC
+	data []byte
 }
