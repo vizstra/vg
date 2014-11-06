@@ -221,33 +221,54 @@ func (self *Context) Scale(x, y float64) {
 
 // NewImage creates image by loading it from the disk from
 // specified file name.  Returns the image handle.
-func (self *Context) NewImage(filename string, flags int) Image {
+func (self *Context) NewImage(filename string, flags int) *Image {
 	cs := C.CString(filename)
 	defer C.free(unsafe.Pointer(cs))
-	return Image{C.nvgCreateImage(self.cbase, cs, C.int(flags))}
+	return &Image{C.nvgCreateImage(self.cbase, cs, C.int(flags)), self}
 }
 
 // Creates image by loading it from the specified chunk of memory.
 // Returns handle to the image.
-// int nvgCreateImageMem(NVGcontext* ctx, int imageFlags, unsigned char* data, int ndata){
-
-// }
+func (self *Context) NewImageFromData(data []byte, flags int) *Image {
+	return &Image{
+		C.nvgCreateImageMem(self.cbase, C.int(flags), (*C.uchar)(unsafe.Pointer(&data[0])), C.int(len(data))),
+		self,
+	}
+}
 
 // // Creates image from specified image data.
 // // Returns handle to the image.
 // int nvgCreateImageRGBA(NVGcontext* ctx, int w, int h, int imageFlags, const unsigned char* data);
+
+type Image struct {
+	handle  C.int
+	context *Context
+}
 
 // // Updates image data specified by image handle.
 // void nvgUpdateImage(NVGcontext* ctx, int image, const unsigned char* data);
 
 // // Returns the domensions of a created image.
 // void nvgImageSize(NVGcontext* ctx, int image, int* w, int* h);
+func (self *Image) Size() (float64, float64) {
+	var w, h C.int
+	C.nvgImageSize(self.context.cbase, self.handle, &w, &h)
+	return float64(w), float64(h)
+}
 
 // // Deletes created image.
-// void nvgDeleteImage(NVGcontext* ctx, int image);
+func (self *Image) Delete() {
+	C.nvgDeleteImage(self.context.cbase, self.handle)
+}
 
-type Image struct {
-	handle C.int
+func (self *Image) Draw(x, y float64) {
+	w, h := self.Size()
+	p := self.context.ImagePattern(x, y, w, h, 0.0/180.0*3.14, *self, 0, 1.0)
+	self.context.BeginPath()
+	self.context.RoundedRect(x, y, w, h, 10)
+	self.context.FillPaint(p)
+	self.context.Fill()
+	self.context.ClosePath()
 }
 
 type Paint struct {
@@ -403,7 +424,7 @@ func (self Context) NewFont(name, filepath string) *Font {
 	return self.fonts[name]
 }
 
-// Creates image by loading it from the specified memory chunk.
+// Creates image by loading it from the specified memory chunk, .
 // Returns handle to the font.
 func (self Context) NewFontMem(name string, data []byte) (*Font, error) {
 	if _, ok := self.fonts[name]; !ok {
