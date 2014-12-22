@@ -16,6 +16,12 @@
 // 3. This notice may not be removed or altered from any source distribution.
 //
 
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// UNCOMMENT DEFINITION TO USE FEETYPE // Better Quality
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// #define FONS_USE_FREETYPE
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 #ifndef FONS_H
 #define FONS_H
 
@@ -138,7 +144,6 @@ void fonsDrawDebug(FONScontext* s, float x, float y);
 #ifdef FONTSTASH_IMPLEMENTATION
 
 #define FONS_NOTUSED(v)  (void)sizeof(v)
-
 #ifdef FONS_USE_FREETYPE
 
 #include <ft2build.h>

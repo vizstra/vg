@@ -1,7 +1,7 @@
 // +build !goci
 package vg
 
-// #cgo linux pkg-config: glfw3 xxf86vm x11 gl glu xrandr xi xcursor gthread-2.0
+// #cgo linux pkg-config: glfw3 xxf86vm x11 gl glu xrandr xi xcursor gthread-2.0 freetype2
 // #cgo linux LDFLAGS: -lm
 // #define NANOVG_GL3_IMPLEMENTATION
 // #include <stdlib.h>
@@ -10,6 +10,7 @@ package vg
 // #include "nanovg.h"
 // #include "nanovg_gl.h"
 // #include "nanovg_gl_utils.h"
+// #define FONS_USE_FREETYPE
 // #include "fontstash.h"
 // #include "stb_image.h"
 // #include "stb_truetype.h"
@@ -86,7 +87,10 @@ func NewContext() Context {
 		C.nvgCreateGL3(C.NVG_ANTIALIAS | C.NVG_STENCIL_STROKES),
 		make(map[string]*Font),
 	}
-	ctx.NewFont(FONT_DEFAULT, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+	// ctx.NewFont(FONT_DEFAULT, "/usr/share/fonts/truetype/freefont/FreeSans.ttf")
+	ctx.NewFont(FONT_DEFAULT, "res/Roboto/Roboto-Regular.ttf")
+	// ctx.NewFont(FONT_DEFAULT, "/usr/share/fonts/truetype/msttcorefonts/Verdana_Bold.ttf")
+	// ctx.NewFont(FONT_DEFAULT, "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf")
 	return ctx
 }
 
@@ -453,41 +457,72 @@ func (self Context) FindFont(name string) (*Font, error) {
 	return self.fonts[name], nil
 }
 
-// Sets the font size of current text style.
-func (self Context) FontSize(size float64) {
-	C.nvgFontSize(self.cbase, C.float(size))
+// SetFontSize sets the font size of current text style in pixels.
+func (self Context) SetFontSize(px float64) {
+	C.nvgFontSize(self.cbase, C.float(px))
 }
 
-// Sets the blur of current text style.
+// SetFontPtSize sets the font size of current text style in points.
+func (self Context) SetFontPtSize(pt float64) {
+	C.nvgFontSize(self.cbase, C.float(pt*1.333333333))
+}
+
+// FontBlur sets the blur of current text style.
 func (self Context) FontBlur(blur float64) {
 	C.nvgFontBlur(self.cbase, C.float(blur))
 }
 
-// Sets the letter spacing of current text style.
+// TextLetterSpacing sets the letter spacing of current text style.
 func (self Context) TextLetterSpacing(spacing float64) {
 	C.nvgTextLetterSpacing(self.cbase, C.float(spacing))
 }
 
-// Sets the proportional line height of current text style. The line height is specified as multiple of font size.
+// TextLineHeight sets the proportional line height of current text style. The line height is specified as multiple of font size.
 func (self Context) TextLineHeight(h float64) {
 	C.nvgTextLineHeight(self.cbase, C.float(h))
 }
 
-// Sets the text align of current text style, see NVGaling for options.
+// TextAlign sets the text align of current text style, see NVGaling for options.
 func (self Context) TextAlign(align Align) {
 	C.nvgTextAlign(self.cbase, C.int(align))
 }
 
-// Sets the font face based on specified id of current text style.
+// SetFont sets the font to be used.
 func (self Context) SetFont(f *Font) {
 	C.nvgFontFaceId(self.cbase, f.cbase)
 }
 
-// // Sets the font face based on specified name of current text style.
-func (self Context) FontFace(name string) {
+// SetFontFace sets the font based on given string name of current text style.
+func (self Context) SetFontFace(name string) {
 	n := C.CString(name)
 	defer C.free(unsafe.Pointer(n))
 	C.nvgFontFace(self.cbase, n)
+}
+
+// TextMetrics returns the vertical metrics based on the current text style.
+// Measured values are returned in local coordinate space.
+func (self Context) TextMetrics() (ascender, descender, lineh float64) {
+	var a, d, lh C.float
+	C.nvgTextMetrics(self.cbase, &a, &d, &lh)
+	return float64(a), float64(d), float64(lh)
+}
+
+// NVGcontext* ctx, float x, float y, const char* string, const char* end, float* bounds
+func (self Context) TextBounds(text string, x, y float64) (xmin, ymin, xmax, ymax float64) {
+	n := C.CString(text)
+	defer C.free(unsafe.Pointer(n))
+	var bounds [4]C.float
+	C.nvgTextBounds(self.cbase, C.float(x), C.float(y), n, nil, &bounds[0])
+	return float64(bounds[0]), float64(bounds[1]), float64(bounds[2]), float64(bounds[3])
+}
+
+// RuneBounds calculates the boundry of the specified rune.
+func (self Context) RuneBounds(r rune, x, y float64) (X, minX, maxX float64) {
+	n := C.CString(string(r))
+	defer C.free(unsafe.Pointer(n))
+	var p C.NVGglyphPosition
+	C.nvgTextGlyphPositions(self.cbase, C.float(x), C.float(y), n, nil, &p, 1)
+	return float64(p.x), float64(p.minx), float64(p.maxx)
 }
 
 // Text draws text string at specified location.
@@ -497,11 +532,17 @@ func (self Context) Text(x, y float64, text string) {
 	C.nvgText(self.cbase, C.float(x), C.float(y), t, nil)
 }
 
+func (self Context) Rune(x, y float64, r rune) {
+	var t C.char = C.char(r)
+	// defer C.free(unsafe.Pointer(t))
+	C.nvgText(self.cbase, C.float(x), C.float(y), &t, nil)
+}
+
 // WrappedText will wrap text at the specified location at the specified with.
-func (self Context) WrappedText(x, y, w float64, text string) {
+func (self Context) WrappedText(x, y, w float64, text string) float64 {
 	t := C.CString(text)
 	defer C.free(unsafe.Pointer(t))
-	C.nvgTextBox(self.cbase, C.float(x), C.float(y), C.float(w), t, nil)
+	return float64(C.nvgTextBox(self.cbase, C.float(x), C.float(y), C.float(w), t, nil))
 }
 
 type GlyphPosition struct {

@@ -32,8 +32,8 @@
 #endif
 
 #define NVG_INIT_FONTIMAGE_SIZE  512
-#define NVG_MAX_FONTIMAGE_SIZE   2048
-#define NVG_MAX_FONTIMAGES       4
+#define NVG_MAX_FONTIMAGE_SIZE   4096
+#define NVG_MAX_FONTIMAGES       16
 
 #define NVG_INIT_COMMANDS_SIZE 256
 #define NVG_INIT_POINTS_SIZE 128
@@ -2346,7 +2346,7 @@ float nvgText(NVGcontext* ctx, float x, float y, const char* string, const char*
 	return iter.x;
 }
 
-void nvgTextBox(NVGcontext* ctx, float x, float y, float breakRowWidth, const char* string, const char* end)
+float nvgTextBox(NVGcontext* ctx, float x, float y, float breakRowWidth, const char* string, const char* end)
 {
 	NVGstate* state = nvg__getState(ctx);
 	NVGtextRow rows[2];
@@ -2377,6 +2377,7 @@ void nvgTextBox(NVGcontext* ctx, float x, float y, float breakRowWidth, const ch
 	}
 
 	state->textAlign = oldAlign;
+	return y;
 }
 
 int nvgTextGlyphPositions(NVGcontext* ctx, float x, float y, const char* string, const char* end, NVGglyphPosition* positions, int maxPositions)
